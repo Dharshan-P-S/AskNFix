@@ -1,0 +1,11 @@
+# Ignore node_modules folder
+node_modules/
+
+# Ignore the Git installer file (if you don't need it in your repo)
+Git-2.49.0-64-bit.exe
+
+# Ignore package-lock.json file
+package-lock.json
+
+# Ignore images folder
+images/
