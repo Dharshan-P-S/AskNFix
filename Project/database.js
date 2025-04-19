@@ -2,7 +2,7 @@
 const mysql = require("mysql2");
 
 const dbConfig = {
-    host: "127.0.0.1",
+    host: "10.7.99.214",
     port: 3306,
     user: "dbmsuser",
     password: "dbmsproject",
