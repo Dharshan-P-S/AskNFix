@@ -39,8 +39,9 @@
 
             <div class="clear"></div>
             <div class="action-button-container">
-                <button type="button" id="viewQueriesButton" class="action-button" onclick="window.location.href='view_queries.html'">
-                    View Queries
+                <!-- Modified onclick to call a function -->
+                <button type="button" id="viewQueriesButton" class="action-button" onclick="navigateToQueries()">
+                    View Queries <!-- Text will be updated by JS -->
                 </button>
                 <!-- Add other action buttons here as needed -->
             </div>
@@ -54,10 +55,12 @@
 
     <script>
         // Element references
+        // Element references
         const staffNameElement = document.getElementById('staff-name');
         const staffIdElement = document.getElementById('staff-id');
         const staffRoleElement = document.getElementById('staff-role');
-        // Removed reference to logoutButton
+        const viewQueriesButton = document.getElementById('viewQueriesButton'); // Get the button element
+        let currentUserRole = null; // Variable to store the user's role globally on this page
 
         // Function to toggle responsive navigation menu
         function toggleMenu() {
@@ -95,7 +98,20 @@
                 if (result.success && result.user && result.user.type === 'staff') {
                     staffNameElement.textContent = result.user.name || 'N/A';
                     staffIdElement.textContent = result.user.id || 'N/A';
-                    staffRoleElement.textContent = result.user.role || 'N/A';
+                    currentUserRole = result.user.role || 'N/A'; // Store the role
+                    staffRoleElement.textContent = currentUserRole;
+
+                    // Update button text based on role
+                    if (viewQueriesButton) {
+                        if (currentUserRole === "Executive Warden" || currentUserRole === "College Maintenance Staff Head") {
+                            viewQueriesButton.textContent = "View & Assign Queries"; // Updated text
+                        } else {
+                            viewQueriesButton.textContent = "View My Assigned Queries"; // Updated text
+                        }
+                    } else {
+                        console.error("Could not find the viewQueriesButton element.");
+                    }
+
                 } else {
                     // Handle cases where user is not staff, not logged in, or server returned success=false
                     console.warn('User not logged in as staff or error fetching data:', result.message || 'No staff user data found.');
@@ -139,6 +155,21 @@
                  localStorage.clear();
                  sessionStorage.clear();
                  window.location.href = 'stafflogin.html'; // Redirect specifically to staff login
+            }
+        }
+
+        // NEW Function to navigate based on role
+        function navigateToQueries() {
+            if (!currentUserRole) {
+                console.error("User role not determined yet. Cannot navigate.");
+                alert("Could not determine user role. Please try refreshing.");
+                return;
+            }
+
+            if (currentUserRole === "Executive Warden" || currentUserRole === "College Maintenance Staff Head") {
+                window.location.href = 'assign_queries.html'; // Page for assigning
+            } else {
+                window.location.href = 'my_assigned_queries.html'; // Page for viewing assigned
             }
         }
 

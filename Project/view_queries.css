@@ -337,3 +337,107 @@ main {
     resize: vertical;
     /* Allow vertical resizing */
 }
+
+
+/* --- Styles for Assignment Controls (Added for assign_queries.html) --- */
+.assignment-section {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #eee;
+}
+
+.assignment-controls {
+    display: flex; /* Use flexbox for alignment */
+    align-items: center; /* Vertically align items */
+    gap: 10px; /* Space between elements */
+    flex-wrap: wrap; /* Allow wrapping on smaller screens */
+}
+
+.assignment-controls select {
+    padding: 8px 12px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.9em;
+    min-width: 180px; /* Give dropdown some width */
+    background-color: #fff;
+    cursor: pointer;
+}
+
+.assignment-controls button,
+button.assign-button, /* Style the initial assign button too */
+button.confirm-assign-button,
+button.cancel-assign-button {
+    padding: 8px 15px;
+    font-size: 0.9em;
+    border-radius: 4px;
+    cursor: pointer;
+    border: none; /* Remove default border */
+    color: white;
+    transition: background-color 0.3s ease, transform 0.1s ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+button.assign-button { /* Initial button */
+    background-color: #007bff; /* Blue */
+}
+button.assign-button:hover {
+    background-color: #0056b3;
+}
+
+button.confirm-assign-button {
+    background-color: #28a745; /* Green */
+}
+button.confirm-assign-button:hover {
+    background-color: #218838;
+}
+
+button.cancel-assign-button {
+    background-color: #6c757d; /* Grey */
+    color: white;
+}
+button.cancel-assign-button:hover {
+    background-color: #5a6268;
+}
+
+.assignment-controls button:active,
+button.assign-button:active,
+button.confirm-assign-button:active,
+button.cancel-assign-button:active {
+    transform: scale(0.98); /* Slight press effect */
+}
+
+/* Style for message area within assignment section */
+.assignment-section .message-area {
+    margin-top: 10px;
+    font-size: 0.9em;
+    padding: 8px;
+    border-radius: 4px;
+    display: block; /* Ensure it takes space */
+    width: calc(100% - 16px); /* Adjust width considering padding */
+}
+.assignment-section .error-message {
+    color: #721c24;
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+    font-weight: bold;
+}
+.assignment-section .success-message {
+    color: #155724;
+    background-color: #d4edda;
+    border: 1px solid #c3e6cb;
+    font-weight: bold;
+}
+
+/* Responsive adjustments for assignment controls */
+@media (max-width: 768px) {
+    .assignment-controls {
+        flex-direction: column; /* Stack vertically */
+        align-items: stretch; /* Make items full width */
+        gap: 8px;
+    }
+    .assignment-controls select,
+    .assignment-controls button {
+        width: 100%; /* Make controls full width */
+        text-align: center;
+    }
+}

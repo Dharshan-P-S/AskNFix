@@ -1017,6 +1017,400 @@ app.get('/api/rooms/:roomno/appliances', async (req, res) => {
     }
 });
 
+
+// --- NEW: Endpoint for Wardens/Heads to get queries they can assign ---
+app.get("/api/assignable-queries", async (req, res) => {
+    // 1. Authentication & Authorization Check (Warden or Head)
+    if (!req.session.user || req.session.user.type !== 'staff' ||
+        (req.session.user.role !== "Executive Warden" && req.session.user.role !== "College Maintenance Staff Head")) {
+        return res.status(401).json({ success: false, message: "Unauthorized: Only Wardens/Heads can access this." });
+    }
+
+    const isHostelWarden = req.session.user.role === "Executive Warden"; // Determine if Hostel or College Head
+
+    try {
+        // 2. Construct Base Query (Similar to /api/queries but might need adjustments)
+        // Fetch queries that are 'not done' AND not already assigned and 'not done'
+        let sql = `
+            SELECT
+                q.QUERY_ID, q.roomno, q.ROLLNO, q.description, q.status,
+                q.raised_date, q.raised_time,
+                r.block_id,
+                qa.appliance_id, a.name AS appliance_name, qa.count AS appliance_count,
+                -- Check if the query is already assigned and not done
+                EXISTS (
+                    SELECT 1 FROM assigned_queries aq
+                    WHERE aq.query_id = q.QUERY_ID AND aq.status = 'not done'
+                ) AS is_assigned
+            FROM query q
+            JOIN room r ON q.roomno = r.roomno
+            LEFT JOIN query_appliances qa ON q.QUERY_ID = qa.query_id
+            LEFT JOIN appliances a ON qa.appliance_id = a.appliance_id
+            WHERE q.status = 'not done'
+        `;
+
+        // 3. Add Conditional Filtering based on Warden/Head Type
+        if (isHostelWarden) {
+            // Executive Warden sees Hostel blocks (1, 2)
+            sql += ` AND r.block_id IN (1, 2) `;
+        } else {
+            // College Maintenance Head sees Academic blocks (NOT 1, 2)
+            sql += ` AND r.block_id NOT IN (1, 2) `;
+        }
+
+        // Order by date/time descending
+        sql += ` ORDER BY q.raised_date DESC, q.raised_time DESC;`;
+
+        // 4. Execute Query
+        const promisePool = db.promise();
+        const [results] = await promisePool.query(sql);
+
+        // 5. Process Results to Group Appliances and Filter out fully assigned ones if needed
+        const queriesMap = new Map();
+        results.forEach(row => {
+            if (!queriesMap.has(row.QUERY_ID)) {
+                queriesMap.set(row.QUERY_ID, {
+                    queryId: row.QUERY_ID,
+                    roomNo: row.roomno,
+                    reportedBy: row.ROLLNO,
+                    description: row.description,
+                    status: row.status, // Should be 'not done'
+                    blockId: row.block_id,
+                    raised_date: row.raised_date,
+                    raised_time: row.raised_time,
+                    isAssigned: row.is_assigned > 0, // Convert EXISTS result to boolean
+                    appliances: []
+                });
+            }
+            // Add appliance details if they exist
+            if (row.appliance_id) {
+                queriesMap.get(row.QUERY_ID).appliances.push({
+                    id: row.appliance_id,
+                    name: row.appliance_name,
+                    count: row.appliance_count
+                });
+            }
+        });
+
+        // Convert map values to array - potentially filter here if needed later
+        const assignableQueries = Array.from(queriesMap.values());
+
+        // 6. Send Response
+        res.json({ success: true, queries: assignableQueries });
+
+    } catch (error) {
+        console.error("❌ Database error fetching /api/assignable-queries:", error);
+        res.status(500).json({ success: false, message: "Database error fetching assignable queries." });
+    }
+});
+
+// --- NEW: Endpoint to get available staff for assignment ---
+app.get("/api/available-staff", async (req, res) => {
+    // 1. Authentication & Authorization Check (Warden or Head)
+    if (!req.session.user || req.session.user.type !== 'staff' ||
+        (req.session.user.role !== "Executive Warden" && req.session.user.role !== "College Maintenance Staff Head")) {
+        return res.status(401).json({ success: false, message: "Unauthorized: Only Wardens/Heads can access this." });
+    }
+
+    const isHostelWarden = req.session.user.role === "Executive Warden";
+
+    try {
+        // 2. Base SQL to select staff
+        let staffSql = `
+            SELECT s.LOGINID, s.NAME, s.role
+            FROM staff s
+            WHERE
+                -- Exclude the wardens/heads themselves
+                s.role NOT IN ('Executive Warden', 'College Maintenance Staff Head')
+                -- Exclude staff who currently have ANY 'not done' assignment
+                AND s.LOGINID NOT IN (
+                    SELECT aq.staff_id
+                    FROM assigned_queries aq
+                    WHERE aq.status = 'not done'
+                )
+        `;
+
+        // 3. Filter staff based on the domain (Hostel vs College)
+        if (isHostelWarden) {
+            // Hostel Warden assigns to staff whose LOGINID does NOT contain 'C' (assuming 'C' means College)
+            staffSql += ` AND s.LOGINID NOT LIKE '%C%' `;
+        } else {
+            // College Head assigns to staff whose LOGINID contains 'C'
+            staffSql += ` AND s.LOGINID LIKE '%C%' `;
+        }
+
+        staffSql += ` ORDER BY s.NAME ASC;`;
+
+        // 4. Execute Query
+        const promisePool = db.promise();
+        const [staffResults] = await promisePool.query(staffSql);
+
+        // 5. Format results (optional, could just send staffResults)
+        const availableStaff = staffResults.map(staff => ({
+            id: staff.LOGINID,
+            name: staff.NAME,
+            role: staff.role
+        }));
+
+        // 6. Send Response
+        res.json({ success: true, staff: availableStaff });
+
+    } catch (error) {
+        console.error("❌ Database error fetching /api/available-staff:", error);
+        res.status(500).json({ success: false, message: "Database error fetching available staff." });
+    }
+});
+
+// --- NEW: Endpoint to assign a query to a staff member ---
+app.post("/api/assign-query", async (req, res) => {
+    // 1. Authentication & Authorization Check (Warden or Head)
+    if (!req.session.user || req.session.user.type !== 'staff' ||
+        (req.session.user.role !== "Executive Warden" && req.session.user.role !== "College Maintenance Staff Head")) {
+        return res.status(401).json({ success: false, message: "Unauthorized: Only Wardens/Heads can assign queries." });
+    }
+
+    const { queryId, staffId } = req.body;
+
+    // 2. Validation
+    if (!queryId || !staffId || isNaN(parseInt(queryId)) || typeof staffId !== 'string') {
+        return res.status(400).json({ success: false, message: "Missing or invalid Query ID or Staff ID." });
+    }
+    const parsedQueryId = parseInt(queryId);
+
+    let connection;
+    try {
+        const promisePool = db.promise();
+        connection = await promisePool.getConnection();
+        await connection.beginTransaction();
+
+        // 3. Check if the query exists and is 'not done'
+        const checkQuerySql = "SELECT status FROM query WHERE QUERY_ID = ? FOR UPDATE"; // Lock row
+        const [queryResults] = await connection.query(checkQuerySql, [parsedQueryId]);
+        if (queryResults.length === 0 || queryResults[0].status !== 'not done') {
+            await connection.rollback();
+            connection.release();
+            return res.status(404).json({ success: false, message: "Query not found or already completed." });
+        }
+
+        // 4. Check if the staff exists and is eligible (optional but good practice)
+        //    (Could reuse logic from /api/available-staff if needed, but simpler check here)
+        const checkStaffSql = "SELECT LOGINID FROM staff WHERE LOGINID = ?";
+        const [staffResults] = await connection.query(checkStaffSql, [staffId]);
+        if (staffResults.length === 0) {
+            await connection.rollback();
+            connection.release();
+            return res.status(404).json({ success: false, message: "Selected staff member not found." });
+        }
+
+        // 5. Check if this specific assignment already exists and is 'not done'
+        const checkExistingAssignmentSql = `
+            SELECT query_id FROM assigned_queries
+            WHERE query_id = ? AND staff_id = ? AND status = 'not done'
+        `;
+        const [existingAssignment] = await connection.query(checkExistingAssignmentSql, [parsedQueryId, staffId]);
+        if (existingAssignment.length > 0) {
+            await connection.rollback();
+            connection.release();
+            return res.status(409).json({ success: false, message: "This query is already assigned to this staff member and is pending." }); // 409 Conflict
+        }
+
+        // 6. Insert into assigned_queries table
+        const insertSql = `
+            INSERT INTO assigned_queries (query_id, staff_id, status, assigned_date, assigned_time)
+            VALUES (?, ?, 'not done', CURDATE(), CURTIME())
+        `;
+        const [insertResult] = await connection.query(insertSql, [parsedQueryId, staffId]);
+
+        if (insertResult.affectedRows === 0) {
+            await connection.rollback();
+            connection.release();
+            return res.status(500).json({ success: false, message: "Failed to assign query." });
+        }
+
+        // 7. Commit Transaction
+        await connection.commit();
+        connection.release();
+
+        // 8. Send Success Response
+        res.json({ success: true, message: `Query ${parsedQueryId} assigned to staff ${staffId} successfully.` });
+
+    } catch (error) {
+        console.error("❌ Database error during /api/assign-query:", error);
+        if (connection) {
+            try { await connection.rollback(); } catch (rbError) { console.error("Rollback failed:", rbError); }
+            connection.release();
+        }
+        // Handle potential duplicate key errors if unique constraint exists
+        if (error.code === 'ER_DUP_ENTRY') {
+             return res.status(409).json({ success: false, message: "Assignment failed: Possible duplicate entry." });
+        }
+        res.status(500).json({ success: false, message: "Database error during query assignment." });
+    }
+});
+
+
+// --- NEW: Endpoint for staff to get their assigned queries ---
+app.get("/api/my-assigned-queries", async (req, res) => {
+    // 1. Authentication Check
+    if (!req.session.user || req.session.user.type !== 'staff') {
+        return res.status(401).json({ success: false, message: "Unauthorized: Please log in as staff." });
+    }
+    const loggedInStaffId = req.session.user.id;
+
+    try {
+        // 2. SQL Query to fetch assigned queries with details
+        const sql = `
+            SELECT
+                q.QUERY_ID, q.roomno, q.ROLLNO AS reported_by, q.description,
+                q.raised_date, q.raised_time,
+                aq.assigned_date, aq.assigned_time,
+                r.block_id,
+                qa.appliance_id, a.name AS appliance_name, qa.count AS appliance_count
+            FROM assigned_queries aq
+            JOIN query q ON aq.query_id = q.QUERY_ID
+            JOIN room r ON q.roomno = r.roomno
+            LEFT JOIN query_appliances qa ON q.QUERY_ID = qa.query_id
+            LEFT JOIN appliances a ON qa.appliance_id = a.appliance_id
+            WHERE aq.staff_id = ? AND aq.status = 'not done' AND q.status = 'not done' -- Ensure both statuses are pending
+            ORDER BY aq.assigned_date DESC, aq.assigned_time DESC;
+        `;
+
+        // 3. Execute Query
+        const promisePool = db.promise();
+        const [results] = await promisePool.query(sql, [loggedInStaffId]);
+
+        // 4. Process Results (Group appliances)
+        const queriesMap = new Map();
+        results.forEach(row => {
+            if (!queriesMap.has(row.QUERY_ID)) {
+                queriesMap.set(row.QUERY_ID, {
+                    queryId: row.QUERY_ID,
+                    roomNo: row.roomno,
+                    reportedBy: row.reported_by,
+                    description: row.description,
+                    raisedDate: row.raised_date,
+                    raisedTime: row.raised_time,
+                    assignedDate: row.assigned_date,
+                    assignedTime: row.assigned_time,
+                    blockId: row.block_id,
+                    appliances: []
+                });
+            }
+            // Add appliance details if they exist
+            if (row.appliance_id) {
+                queriesMap.get(row.QUERY_ID).appliances.push({
+                    id: row.appliance_id,
+                    name: row.appliance_name,
+                    count: row.appliance_count
+                });
+            }
+        });
+
+        const assignedQueries = Array.from(queriesMap.values());
+
+        // 5. Send Response
+        res.json({ success: true, queries: assignedQueries });
+
+    } catch (error) {
+        console.error("❌ Database error fetching /api/my-assigned-queries:", error);
+        res.status(500).json({ success: false, message: "Database error fetching assigned queries." });
+    }
+});
+
+
+// --- NEW: Endpoint for staff to mark their OWN assigned query as complete ---
+app.post("/api/assigned-queries/:queryId/complete", async (req, res) => {
+    // 1. Authentication Check (Must be logged-in staff)
+    if (!req.session.user || req.session.user.type !== 'staff') {
+        return res.status(401).json({ success: false, message: "Unauthorized: Please log in as staff." });
+    }
+    const loggedInStaffId = req.session.user.id;
+    const { queryId } = req.params;
+    const { description } = req.body;
+
+    // 2. Validation
+    if (!queryId || isNaN(parseInt(queryId))) {
+        return res.status(400).json({ success: false, message: "Invalid or missing Query ID." });
+    }
+    const parsedQueryId = parseInt(queryId);
+    if (!description || typeof description !== 'string' || description.trim() === '') {
+        return res.status(400).json({ success: false, message: "Completion description is required." });
+    }
+    const trimmedDescription = description.trim();
+
+    let connection;
+    try {
+        const promisePool = db.promise();
+        connection = await promisePool.getConnection();
+        await connection.beginTransaction();
+
+        // 3. Verify the query exists, is assigned to THIS staff, and both are 'not done'
+        const checkSql = `
+            SELECT q.status AS query_status, aq.status AS assignment_status
+            FROM query q
+            JOIN assigned_queries aq ON q.QUERY_ID = aq.query_id
+            WHERE q.QUERY_ID = ? AND aq.staff_id = ?
+            FOR UPDATE; -- Lock rows for update
+        `;
+        const [checkResults] = await connection.query(checkSql, [parsedQueryId, loggedInStaffId]);
+
+        if (checkResults.length === 0) {
+            await connection.rollback();
+            connection.release();
+            return res.status(404).json({ success: false, message: "Query not found or not assigned to you." });
+        }
+
+        const { query_status, assignment_status } = checkResults[0];
+
+        if (query_status !== 'not done' || assignment_status !== 'not done') {
+            await connection.rollback();
+            connection.release();
+             // 409 Conflict is appropriate here
+            return res.status(409).json({ success: false, message: "Query or assignment is already marked as done." });
+        }
+
+        // 4. Update query table status
+        const updateQuerySql = `UPDATE query SET status = 'done' WHERE QUERY_ID = ?`;
+        const [updateQueryResult] = await connection.query(updateQuerySql, [parsedQueryId]);
+        if (updateQueryResult.affectedRows === 0) {
+             throw new Error("Failed to update query status."); // Will trigger rollback
+        }
+
+        // 5. Update assigned_queries table status
+        const updateAssignmentSql = `UPDATE assigned_queries SET status = 'done' WHERE query_id = ? AND staff_id = ?`;
+        const [updateAssignmentResult] = await connection.query(updateAssignmentSql, [parsedQueryId, loggedInStaffId]);
+         if (updateAssignmentResult.affectedRows === 0) {
+             throw new Error("Failed to update assignment status."); // Will trigger rollback
+        }
+
+        // 6. Insert into completed_queries table
+        const insertCompletedSql = `
+            INSERT INTO completed_queries (query_id, staff_id, description, completed_date, completed_time)
+            VALUES (?, ?, ?, CURDATE(), CURTIME())
+        `;
+        const [insertResult] = await connection.query(insertCompletedSql, [parsedQueryId, loggedInStaffId, trimmedDescription]);
+        if (insertResult.affectedRows === 0) {
+            throw new Error("Failed to insert into completed_queries."); // Will trigger rollback
+        }
+
+        // 7. Commit Transaction
+        await connection.commit();
+        connection.release();
+
+        // 8. Send Success Response
+        res.json({ success: true, message: "Query marked as completed successfully." });
+
+    } catch (error) {
+        console.error(`❌ Database error during /api/assigned-queries/${queryId}/complete:`, error);
+        if (connection) {
+            try { await connection.rollback(); } catch (rbError) { console.error("Rollback failed:", rbError); }
+            connection.release();
+        }
+        res.status(500).json({ success: false, message: `Database error completing query: ${error.message}` });
+    }
+});
+
+
 // (Keep /logout route here)
 app.post("/logout", (req, res) => {
     const userName = req.session.user ? (req.session.user.name || req.session.user.id) : 'User';
