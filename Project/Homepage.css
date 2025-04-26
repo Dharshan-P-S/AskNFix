@@ -85,6 +85,11 @@ nav {
     background-size: cover;
     background-position: center;
     transition: transform 0.3s ease, filter 0.3s ease;
+    text-shadow:
+        2px 2px 2px black,    /* Bottom-right shadow */
+        -2px -2px 2px black,  /* Top-left shadow */
+        2px -2px 2px black,   /* Bottom-left shadow */
+        -2px 2px 2px black;   /* Top-right shadow */   
 }
 
 .large-btn:hover {
@@ -102,6 +107,14 @@ nav {
 
 .hostel {
     background-image: url('./images/hostel_placeholder.jpg');
+}
+
+.pending{
+    background-image: url('./images/pending.png');
+}
+
+.completed{
+    background-image: url('./images/completed.png');
 }
 
 footer {
