@@ -1037,15 +1037,16 @@ app.get("/api/assignable-queries", async (req, res) => {
                 q.raised_date, q.raised_time,
                 r.block_id,
                 qa.appliance_id, a.name AS appliance_name, qa.count AS appliance_count,
-                -- Check if the query is already assigned and not done
-                EXISTS (
-                    SELECT 1 FROM assigned_queries aq
-                    WHERE aq.query_id = q.QUERY_ID AND aq.status = 'not done'
-                ) AS is_assigned
+                -- Fetch assigned staff details if assigned and not done
+                aq.staff_id AS assigned_staff_id,
+                s.NAME AS assigned_staff_name
             FROM query q
             JOIN room r ON q.roomno = r.roomno
             LEFT JOIN query_appliances qa ON q.QUERY_ID = qa.query_id
             LEFT JOIN appliances a ON qa.appliance_id = a.appliance_id
+            -- Left join to get assignment details only if they exist and are 'not done'
+            LEFT JOIN assigned_queries aq ON q.QUERY_ID = aq.query_id AND aq.status = 'not done'
+            LEFT JOIN staff s ON aq.staff_id = s.LOGINID -- Join staff based on assigned_queries
             WHERE q.status = 'not done'
         `;
 
@@ -1078,7 +1079,9 @@ app.get("/api/assignable-queries", async (req, res) => {
                     blockId: row.block_id,
                     raised_date: row.raised_date,
                     raised_time: row.raised_time,
-                    isAssigned: row.is_assigned > 0, // Convert EXISTS result to boolean
+                    isAssigned: !!row.assigned_staff_id, // Query is assigned if assigned_staff_id is not null
+                    assignedStaffId: row.assigned_staff_id, // Include staff ID
+                    assignedStaffName: row.assigned_staff_name, // Include staff name
                     appliances: []
                 });
             }
@@ -1407,6 +1410,81 @@ app.post("/api/assigned-queries/:queryId/complete", async (req, res) => {
             connection.release();
         }
         res.status(500).json({ success: false, message: `Database error completing query: ${error.message}` });
+    }
+});
+
+
+// --- NEW: Endpoint for Wardens/Heads to view completed queries in their domain ---
+app.get("/completed-queries-staff", async (req, res) => {
+    // 1. Authentication & Authorization Check
+    if (!req.session.user || req.session.user.type !== 'staff' ||
+        (req.session.user.role !== "Executive Warden" && req.session.user.role !== "College Maintenance Staff Head")) {
+        return res.status(401).json({ success: false, message: "Unauthorized: Only Wardens/Heads can access this." });
+    }
+
+    const userRole = req.session.user.role;
+    const isHostelWarden = userRole === "Executive Warden";
+
+    try {
+        const promisePool = db.promise();
+
+        // 2. Base SQL Query
+        let sql = `
+            SELECT
+                cq.query_id,
+                q.ROLLNO AS student_id,
+                q.roomno AS location,
+                q.description AS issue_type, -- Assuming original description indicates issue type broadly
+                cq.description AS remarks, -- Staff completion remarks
+                q.raised_date AS raised_at_date,
+                q.raised_time AS raised_at_time,
+                cq.completed_date AS completed_at_date,
+                cq.completed_time AS completed_at_time,
+                cq.staff_id AS completed_by_staff_id,
+                s.NAME AS completed_by_staff_name, -- Added staff name
+                r.block_id
+            FROM completed_queries cq
+            JOIN query q ON cq.query_id = q.QUERY_ID
+            JOIN room r ON q.roomno = r.roomno
+            LEFT JOIN staff s ON cq.staff_id = s.LOGINID -- Join with staff table
+            WHERE q.status = 'done' -- Ensure we only get queries marked as done
+        `;
+
+        // 3. Add Role-Based Filtering
+        if (isHostelWarden) {
+            // Executive Warden sees Hostel blocks (1, 2)
+            sql += ` AND r.block_id IN (1, 2) `;
+        } else {
+            // College Maintenance Head sees Academic blocks (NOT 1, 2)
+            sql += ` AND r.block_id NOT IN (1, 2) `;
+        }
+
+        // 4. Order Results
+        sql += ` ORDER BY cq.completed_date DESC, cq.completed_time DESC;`;
+
+        // 5. Execute Query
+        const [results] = await promisePool.query(sql);
+
+        // 6. Format Results (Combine date and time)
+        const formattedQueries = results.map(row => ({
+            query_id: row.query_id,
+            student_id: row.student_id,
+            location: row.location,
+            issue_type: row.issue_type, // You might want a more specific field if available
+            description: row.issue_type, // Using original description as description field for now
+            raised_at: new Date(`${row.raised_at_date.toISOString().split('T')[0]}T${row.raised_at_time}`),
+            completed_at: new Date(`${row.completed_at_date.toISOString().split('T')[0]}T${row.completed_at_time}`),
+            completed_by_staff_id: row.completed_by_staff_id,
+            completed_by_staff_name: row.completed_by_staff_name || 'N/A', // Include staff name
+            remarks: row.remarks
+        }));
+
+        // 7. Send Response
+        res.json({ success: true, queries: formattedQueries });
+
+    } catch (error) {
+        console.error("❌ Database error fetching /completed-queries-staff:", error);
+        res.status(500).json({ success: false, message: "Database error fetching completed queries for staff." });
     }
 });
 

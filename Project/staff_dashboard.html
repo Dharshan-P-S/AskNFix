@@ -40,8 +40,11 @@
             <div class="clear"></div>
             <div class="action-button-container">
                 <!-- Modified onclick to call a function -->
-                <button type="button" id="viewQueriesButton" class="action-button" onclick="navigateToQueries()">
+                <button style="margin-right: 20px;" type="button" id="viewQueriesButton" class="action-button" onclick="navigateToQueries()">
                     View Queries <!-- Text will be updated by JS -->
+                </button>
+                <button style="margin-left: 20px;" type="button" id="viewCompletedQueriesButton" class="action-button" style="display: none;" onclick="navigateToCompletedQueries()">
+                    View Completed Queries
                 </button>
                 <!-- Add other action buttons here as needed -->
             </div>
@@ -60,6 +63,7 @@
         const staffIdElement = document.getElementById('staff-id');
         const staffRoleElement = document.getElementById('staff-role');
         const viewQueriesButton = document.getElementById('viewQueriesButton'); // Get the button element
+        const viewCompletedQueriesButton = document.getElementById('viewCompletedQueriesButton'); // Get the new button element
         let currentUserRole = null; // Variable to store the user's role globally on this page
 
         // Function to toggle responsive navigation menu
@@ -105,12 +109,21 @@
                     if (viewQueriesButton) {
                         if (currentUserRole === "Executive Warden" || currentUserRole === "College Maintenance Staff Head") {
                             viewQueriesButton.textContent = "View & Assign Queries"; // Updated text
+                        }
+                        // Show/hide the completed queries button
+                        if (viewCompletedQueriesButton) {
+                            if (currentUserRole === "Executive Warden" || currentUserRole === "College Maintenance Staff Head") {
+                                viewCompletedQueriesButton.style.display = 'inline-block'; // Show the button
+                            } else {
+                                viewCompletedQueriesButton.style.display = 'none'; // Keep it hidden for others
+                            }
                         } else {
-                            viewQueriesButton.textContent = "View My Assigned Queries"; // Updated text
+                             console.error("Could not find the viewCompletedQueriesButton element.");
                         }
                     } else {
                         console.error("Could not find the viewQueriesButton element.");
                     }
+
 
                 } else {
                     // Handle cases where user is not staff, not logged in, or server returned success=false
@@ -171,6 +184,11 @@
             } else {
                 window.location.href = 'my_assigned_queries.html'; // Page for viewing assigned
             }
+        }
+
+        // NEW Function to navigate to completed queries page
+        function navigateToCompletedQueries() {
+            window.location.href = 'completedqueriesstaff.html';
         }
 
         // Fetch user data when the page loads

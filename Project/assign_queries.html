@@ -109,10 +109,10 @@
                     <p><strong>Description:</strong> ${query.description}</p>
                     <p><strong>Appliances:</strong></p>
                     ${appliancesHtml}
-                    <p><strong>Status:</strong> <span class="status-${query.status.replace(' ', '-')}">${query.status}</span> ${query.isAssigned ? '<span style="color: orange; font-weight: bold;">(Assigned)</span>' : ''}</p>
+                    <p><strong>Status:</strong> <span class="status-${query.status.replace(' ', '-')}">${query.status}</span> ${query.isAssigned ? `<span style="color: orange; font-weight: bold;">(Assigned to: ${query.assignedStaffName || 'N/A'} [${query.assignedStaffId || 'ID Unknown'}])</span>` : ''}</p>
                     <div class="assignment-section" id="assign-controls-${query.queryId}">
-                        ${!query.isAssigned ? `<button class="assign-button" onclick="showAssignControls(${query.queryId})">Assign Staff</button>` : ''}
-                        <!-- Dropdown and confirm button will be added here -->
+                        ${!query.isAssigned ? `<button class="assign-button" onclick="showAssignControls(${query.queryId})">Assign Staff</button>` : '<span style="font-style: italic; color: #555;">Query is currently assigned.</span>'}
+                        <!-- Dropdown and confirm button will be added here if Assign Staff is clicked -->
                     </div>
                     <div class="message-area" id="message-${query.queryId}"></div>
                 `;
