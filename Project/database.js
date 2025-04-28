@@ -2,10 +2,10 @@
 const mysql = require("mysql2");
 
 const dbConfig = {
-    host: "10.7.99.214",
+    host: "127.0.0.1",
     port: 3306,
-    user: "dbmsuser",
-    password: "dbmsproject",
+    user: "root",
+    password: "javaproject@6",
     database: "dbms_project",
     waitForConnections: true,
     connectionLimit: 10,
