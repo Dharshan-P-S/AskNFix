@@ -867,7 +867,7 @@ app.get("/api/pending-queries", async (req, res) => {
     try {
         const promisePool = db.promise();
 
-        // Fetch basic query information with room details, date, and time
+        // Fetch basic query information with room details, date, time, and assigned staff
         const querySql = `
             SELECT
                 pq.Query_id,
@@ -875,21 +875,25 @@ app.get("/api/pending-queries", async (req, res) => {
                 q.status,
                 q.ROLLNO,
                 q.roomno,
-                q.raised_date,  -- Added raised_date
-                q.raised_time,  -- Added raised_time
+                q.raised_date,
+                q.raised_time,
                 r.block_id,
-                r.roomno AS room_roomno
+                r.roomno AS room_roomno,
+                s.NAME AS assigned_staff_name -- Get the assigned staff's name
             FROM
                 pending_queries pq
             JOIN
                 query q ON pq.Query_id = q.QUERY_ID
             LEFT JOIN
                 room r ON q.roomno = r.roomno
+            LEFT JOIN -- Join to see if a query is assigned
+                assigned_queries aq ON q.QUERY_ID = aq.query_id AND aq.status = 'not done' -- Only interested in active assignments
+            LEFT JOIN -- Join to get the staff name
+                staff s ON aq.staff_id = s.LOGINID
             WHERE
                 q.ROLLNO = ? AND q.status = 'not done'
             ORDER BY
-                q.raised_date DESC, q.raised_time DESC; -- Optional: Order by latest first
-                -- OR ORDER BY pq.Query_id ASC; if you prefer original order
+                q.raised_date DESC, q.raised_time DESC;
         `;
         const [queryResults] = await promisePool.query(querySql, [loggedInRollno]);
 
@@ -922,6 +926,7 @@ app.get("/api/pending-queries", async (req, res) => {
                     roomno: query.roomno,
                     block_id: query.block_id
                 },
+                assigned_staff_name: query.assigned_staff_name || null, // Include staff name, null if not assigned
                 appliances: applianceResults // Add the list of appliances
             });
         }

@@ -4,8 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pending Queries - AskNFix</title>
-    <link rel="icon" href="images/Logo.jpg">
+    <title>React App</title>
+    <link rel="icon" href="https://imgs.search.brave.com/X1JTdfD_78j-z6Fyw9dKT6yIbSMCLuBEQD_mDIVz2oc/rs:fit:500:0:0:0/g:ce/aHR0cHM6Ly9icmFu/ZHNsb2dvcy5jb20v/d3AtY29udGVudC91/cGxvYWRzL2ltYWdl/cy9yZWFjdC1sb2dv/LTEucG5n">
     <link rel="stylesheet" href="Pending_queries.css">
 </head>
 <body>
@@ -23,18 +23,18 @@
     </header>
 
     <div class="pending-queries-container">
-        <h2>Pending Queries</h2>
-        <p>Showing queries you have raised that are still pending.</p> <h3>KP Queries</h3>
+        <h2 style="color: rgb(119, 58, 198);">Pending Queries</h2>
+        <p>Showing queries you have raised that are still pending.</p> <h3 style="color: black;">KP Queries</h3>
         <ul class="query-list" id="kpQueriesList">
             <li>Loading KP queries...</li>
         </ul>
 
-        <h3>Red Building Queries</h3>
+        <h3 style="color: black;">Red Building Queries</h3>
         <ul class="query-list" id="redBuildingQueriesList">
             <li>Loading Red Building queries...</li>
         </ul>
 
-        <h3>Hostel Queries</h3>
+        <h3 style="color: black;">Hostel Queries</h3>
         <ul class="query-list" id="hostelQueriesList">
             <li>Loading Hostel queries...</li>
         </ul>
@@ -203,7 +203,8 @@
                                     <strong>Description:</strong> ${query.description || 'No description provided'}<br>
                                     <strong>Raised Date:</strong> ${formattedDate}<br>
                                     <strong>Raised Time:</strong> ${formattedTime}<br>
-                                    <strong>Status:</strong> ${query.status || 'N/A'}
+                                    <strong>Status:</strong> ${query.status || 'N/A'}<br>
+                                    <strong>Assigned Staff:</strong> ${query.assigned_staff_name ? query.assigned_staff_name : 'Not Assigned'}
                                     ${applianceInfo}
                                 `;
                                 listElement.appendChild(listItem);

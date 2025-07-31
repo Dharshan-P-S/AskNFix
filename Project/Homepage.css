@@ -114,8 +114,7 @@ nav {
 }
 
 .completed{
-    background-image: url('./images/completed.png');
-}
+    background-image: url('./images/completed.png');}
 
 footer {
     text-align: center;
